@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+@theme {
+  /* Brand: Amber */
+  --color-primary-500: #f59e0b;
+  --color-primary-600: #d97706;
+
+  /* Typography */
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-barlow);
+
+  /* Border radius system: 3 levels only */
+  --radius-sm: 4px;    /* badges, tags */
+  --radius-md: 8px;    /* buttons, inputs */
+  --radius-lg: 12px;   /* cards */
+}
+
+body {
+  background-color: #09090b; /* zinc-950 */
+  color: #f4f4f5;             /* zinc-100 */
+}
