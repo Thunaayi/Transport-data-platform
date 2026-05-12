@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { getFlights, getSingleFlight as getFlight } from './flights.service';
+import { syncFlights } from './flights.sync';
 
 export const getFlightsHandler = async (req: Request, res: Response) => {
   try {
@@ -8,6 +9,17 @@ export const getFlightsHandler = async (req: Request, res: Response) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to fetch flights' });
+  }
+};
+
+export const syncFlightsHandler = async (req: Request, res: Response) => {
+  try {
+    const isCritical = req.query.critical === 'true';
+    await syncFlights(isCritical);
+    res.json({ message: 'Flight sync completed' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to sync flights' });
   }
 };
 
