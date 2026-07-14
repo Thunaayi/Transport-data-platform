@@ -1,16 +1,57 @@
 "use client";
 
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { Plane, ArrowLeft, Clock, ShieldCheck, MapPin, Calendar, PlaneTakeoff, PlaneLanding, Info } from 'lucide-react';
+import { useEffect, useState, useMemo } from 'react';
+import { useParams } from 'next/navigation';
+import Link from 'next/link';
+import { ArrowLeft, Calendar, Plane } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
+import dynamic from 'next/dynamic';
+
+const FlightRouteMap = dynamic(() => import('@/components/FlightRouteMap'), { ssr: false });
+
+type AirportInfo = {
+  iataCode: string;
+  name: string;
+  city: string | null;
+  country: string;
+  latitude: number;
+  longitude: number;
+};
+
+type FlightData = {
+  id: string;
+  number: string;
+  origin: string;
+  destination: string;
+  scheduledDeparture: string;
+  scheduledArrival: string;
+  direction?: string;
+  status: string;
+  originDetails: AirportInfo | null;
+  destinationDetails: AirportInfo | null;
+};
+
+function barcodePattern(id: string): string {
+  let seed = 0;
+  for (let i = 0; i < id.length; i++) {
+    seed = ((seed << 5) - seed + id.charCodeAt(i)) | 0;
+  }
+  const chars = ['|', '|', '|', ' ', '|', '|', ' ', '|', '|', ' ', '|', ' '];
+  let result = '';
+  for (let i = 0; i < 40; i++) {
+    const idx = ((seed + i * 7) % chars.length + chars.length) % chars.length;
+    result += chars[idx];
+  }
+  return result;
+}
 
 export default function FlightDetailPage() {
   const { id } = useParams();
-  const router = useRouter();
-  const [flight, setFlight] = useState<any>(null);
+  const [flight, setFlight] = useState<FlightData | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const barcode = useMemo(() => barcodePattern((id as string) || ''), [id]);
 
   useEffect(() => {
     const fetchFlight = async () => {
@@ -29,158 +70,156 @@ export default function FlightDetailPage() {
   }, [id]);
 
   if (loading) return (
-    <div className="min-h-screen pt-32 px-4 flex justify-center">
-      <div className="animate-pulse w-full max-w-2xl bg-zinc-900/50 h-96 rounded-3xl border border-zinc-800" />
+    <div className="min-h-screen pt-28 px-4 flex justify-center">
+      <div className="animate-pulse w-full max-w-4xl bg-brand-cream border-2 border-brand-dark h-80" />
     </div>
   );
 
   if (!flight) return (
-    <div className="min-h-screen pt-32 px-4 text-center">
-      <h1 className="text-2xl font-black text-white mb-4 uppercase tracking-tighter">Flight not found</h1>
-      <button onClick={() => router.push('/')} className="text-primary-500 font-bold hover:underline">Return to dashboard</button>
+    <div className="min-h-screen pt-28 px-4 text-center">
+      <h1 className="text-3xl font-display text-brand-dark mb-4 uppercase tracking-tighter">Flight not found</h1>
+      <Link href="/" className="text-xs font-mono font-bold text-brand-green hover:text-brand-dark uppercase tracking-wider">Return to directory</Link>
     </div>
   );
 
-  return (
-    <main className="min-h-screen pt-28 pb-20 px-4 flex flex-col items-center bg-[#050505]">
-      <div className="w-full max-w-2xl">
-        <button 
-          onClick={() => router.back()}
-          className="flex items-center gap-2 text-zinc-500 hover:text-white mb-8 transition-colors text-[10px] font-black uppercase tracking-[0.2em]"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to directory
-        </button>
+  const statusDisplay = flight.status === 'active' ? 'IN AIR' :
+    flight.status === 'scheduled' ? 'ON TIME' :
+    flight.status === 'landed' ? 'ARRIVED' :
+    flight.status.toUpperCase();
 
-        {/* Boarding Pass Container */}
-        <motion.div 
+  return (
+    <main className="min-h-screen pt-28 pb-16 px-4 flex flex-col items-center">
+      <div className="w-full max-w-5xl">
+        <Link
+          href="/flights"
+          className="inline-flex items-center gap-2 text-brand-dark/50 hover:text-brand-dark active:text-brand-dark mb-6 transition-colors text-xs font-mono font-bold uppercase tracking-wider"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Flights
+        </Link>
+
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="relative bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl"
+          className="flex flex-col lg:flex-row w-full border-4 border-brand-dark shadow-[12px_12px_0px_0px_rgba(24,60,40,1)] bg-white relative"
         >
-          {/* Header Section */}
-          <div className="bg-primary-500 px-8 py-8 flex justify-between items-center border-b border-black/10">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-black rounded-xl shadow-xl">
-                <Plane className="w-6 h-6 text-primary-500" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[10px] font-black uppercase tracking-widest text-black/40 leading-none mb-1">Carrier</span>
-                <span className="text-2xl font-black text-black leading-none font-display tracking-tight uppercase">Pakistan Intl</span>
-              </div>
-            </div>
-            <div className="flex flex-col items-end">
-              <span className="text-[10px] font-black uppercase tracking-widest text-black/40 leading-none mb-1">Flight Number</span>
-              <span className="text-3xl font-black text-black leading-none font-display">{flight.number}</span>
-            </div>
-          </div>
-
-          {/* Main Route Section */}
-          <div className="p-10 space-y-12 bg-[#0a0a0a]">
-            <div className="flex justify-between items-center gap-4">
-              <div className="flex flex-col">
-                <span className="text-6xl md:text-8xl font-black text-white font-display tracking-tighter leading-none">{flight.origin === 'UNKNOWN' ? 'TBD' : flight.origin}</span>
-                <span className="text-zinc-500 text-[10px] font-black uppercase tracking-widest mt-4 ml-1">Departure Port</span>
-              </div>
-              
-              <div className="flex-1 flex flex-col items-center px-6">
-                <div className="w-full flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full bg-primary-500 shadow-[0_0_15px_rgba(245,158,11,0.6)]" />
-                  <div className="flex-1 border-t-2 border-zinc-800 border-dashed relative">
-                    <Plane className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 text-zinc-700 bg-[#0a0a0a] px-1" />
-                  </div>
-                  <div className="w-2 h-2 rounded-full border-2 border-zinc-800" />
+          {/* Main Left Section */}
+          <div className="flex-1 flex flex-col">
+            {/* Header */}
+            <div className="bg-brand-green border-b-4 border-brand-dark p-5 flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <div className="p-1.5 border-2 border-brand-dark bg-brand-cream">
+                  <Plane className="w-5 h-5 text-brand-dark" />
                 </div>
-                <span className="text-[10px] font-black text-zinc-600 uppercase tracking-[0.3em] mt-6">Active Route</span>
+                <div className="flex flex-col">
+                  <span className="text-[9px] font-mono font-bold text-brand-dark/60 uppercase tracking-[0.2em] leading-none mb-0.5">Carrier</span>
+                  <span className="text-xl font-display text-brand-dark leading-none uppercase">Pakistan Intl</span>
+                </div>
               </div>
-
               <div className="flex flex-col items-end">
-                <span className="text-6xl md:text-8xl font-black text-white font-display tracking-tighter leading-none">{flight.destination === 'UNKNOWN' ? 'TBD' : flight.destination}</span>
-                <span className="text-zinc-500 text-[10px] font-black uppercase tracking-widest mt-4 mr-1">Arrival Port</span>
+                <span className="text-[9px] font-mono font-bold text-brand-dark/60 uppercase tracking-[0.2em] leading-none mb-0.5">Flight</span>
+                <span className="text-3xl font-display text-brand-dark leading-none">{flight.number}</span>
               </div>
             </div>
 
-            {/* Tactical Grid Info */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-y-10 gap-x-8 pt-10 border-t border-zinc-800/50">
-              <div className="flex flex-col gap-2">
-                <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">Time</span>
-                <span className="text-2xl font-bold text-white leading-none font-display">{format(new Date(flight.scheduledDeparture), 'HH:mm')}</span>
-                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-tight">{format(new Date(flight.scheduledDeparture), 'dd MMM')}</span>
+            {/* Giant Route */}
+            <div className="p-6 md:p-8 bg-brand-cream flex-1 relative flex flex-col justify-center border-b-4 lg:border-b-0 border-brand-dark">
+              <div className="absolute inset-0 opacity-[0.03] text-[7px] font-mono leading-none flex flex-wrap break-all whitespace-pre-wrap select-none overflow-hidden text-brand-dark p-4">
+                {'|||| | || | |||| || | | || '.repeat(60)}
               </div>
-              <div className="flex flex-col gap-2">
-                <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">Gate</span>
-                <span className="text-2xl font-bold text-primary-500 leading-none font-display">A-24</span>
-                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-tight">Main Concourse</span>
-              </div>
-              <div className="flex flex-col gap-2">
-                <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">Class</span>
-                <span className="text-2xl font-bold text-white leading-none font-display">Y-CLASS</span>
-                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-tight">Economy Premium</span>
-              </div>
-              <div className="flex flex-col gap-2">
-                <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">Status</span>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-primary-500 animate-pulse" />
-                  <span className="text-xl font-bold text-white leading-none font-display uppercase">
-                    {flight.status === 'active' ? 'IN AIR' : 
-                     flight.status === 'scheduled' ? 'ON TIME' : 
-                     flight.status === 'landed' ? 'ARRIVED' : 
-                     flight.status.toUpperCase()}
-                  </span>
+
+              <div className="flex justify-between items-center relative z-10 w-full mb-8">
+                <div className="flex flex-col w-2/5">
+                  <span className="text-[9px] font-mono font-bold text-brand-dark/50 uppercase tracking-[0.2em] mb-1">Origin</span>
+                  <span className="text-6xl md:text-7xl lg:text-[120px] font-display text-brand-dark leading-none">{flight.origin === 'UNKNOWN' ? 'TBD' : flight.origin}</span>
                 </div>
-                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-tight">Verified Live</span>
+                <div className="flex-1 flex flex-col items-center justify-center px-4">
+                  <div className="text-3xl md:text-5xl text-brand-green font-display mb-1">→</div>
+                  <div className="border-t-2 border-dashed border-brand-dark w-full"></div>
+                </div>
+                <div className="flex flex-col items-end text-right w-2/5">
+                  <span className="text-[9px] font-mono font-bold text-brand-dark/50 uppercase tracking-[0.2em] mb-1">Dest</span>
+                  <span className="text-6xl md:text-7xl lg:text-[120px] font-display text-brand-dark leading-none">{flight.destination === 'UNKNOWN' ? 'TBD' : flight.destination}</span>
+                </div>
+              </div>
+
+              {/* Data Grid */}
+              <div className="grid grid-cols-2 md:grid-cols-4 border-2 border-brand-dark bg-white relative z-10">
+                <div className="p-3 border-b-2 md:border-b-0 border-r-2 border-brand-dark flex flex-col justify-center">
+                  <span className="text-[9px] font-mono font-bold text-brand-dark/50 uppercase tracking-[0.2em] mb-1">Depart</span>
+                  <span className="text-2xl font-mono font-bold text-brand-dark leading-none">{format(new Date(flight.scheduledDeparture), 'HH:mm')}</span>
+                  <span className="text-[10px] font-mono font-bold text-brand-dark/60 uppercase mt-0.5">{format(new Date(flight.scheduledDeparture), 'dd MMM')}</span>
+                </div>
+                <div className="p-3 border-b-2 md:border-b-0 md:border-r-2 border-brand-dark flex flex-col justify-center">
+                  <span className="text-[9px] font-mono font-bold text-brand-dark/50 uppercase tracking-[0.2em] mb-1">Gate</span>
+                  <span className="text-2xl font-display text-brand-green leading-none">TBD</span>
+                  <span className="text-[10px] font-mono font-bold text-brand-dark/60 uppercase mt-0.5">Main Terminal</span>
+                </div>
+                <div className="p-3 border-r-2 border-brand-dark flex flex-col justify-center">
+                  <span className="text-[9px] font-mono font-bold text-brand-dark/50 uppercase tracking-[0.2em] mb-1">Class</span>
+                  <span className="text-2xl font-display text-brand-dark leading-none">ECON</span>
+                  <span className="text-[10px] font-mono font-bold text-brand-dark/60 uppercase mt-0.5">Standard</span>
+                </div>
+                <div className="p-3 flex flex-col justify-center bg-brand-cream">
+                  <span className="text-[9px] font-mono font-bold text-brand-dark/50 uppercase tracking-[0.2em] mb-1">Status</span>
+                  <span className="text-xl font-display text-brand-dark leading-none uppercase">{statusDisplay}</span>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Perforated Divider */}
-          <div className="bg-[#0a0a0a] px-10 py-4">
-            <div className="border-t border-zinc-800 border-dashed h-px w-full" />
-          </div>
-
-          {/* Boarding stub section */}
-          <div className="bg-zinc-950 p-10 flex justify-between items-center">
-            <div className="flex gap-12">
-              <div className="flex flex-col gap-2">
-                <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">Boarding</span>
-                <span className="text-3xl font-black text-white leading-none font-display">14:20</span>
+          {/* Right Stub */}
+          <div className="w-full lg:w-72 bg-brand-green border-l-4 border-dashed border-brand-dark p-6 flex flex-col justify-between relative ticket-stub">
+            <div className="flex flex-col gap-6 w-full z-10">
+              <div className="flex flex-col gap-1">
+                <span className="text-[9px] font-mono font-bold text-brand-dark/60 uppercase tracking-[0.2em]">Boarding</span>
+                <span className="text-4xl font-mono font-bold text-brand-dark leading-none">
+                  {format(new Date(new Date(flight.scheduledDeparture).getTime() - 45 * 60000), 'HH:mm')}
+                </span>
               </div>
-              <div className="flex flex-col gap-2">
-                <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">Passenger</span>
-                <span className="text-3xl font-black text-zinc-400 leading-none font-display">GUEST-01</span>
+              <div className="flex flex-col gap-1">
+                <span className="text-[9px] font-mono font-bold text-brand-dark/60 uppercase tracking-[0.2em]">Passenger</span>
+                <span className="text-xl font-display text-brand-dark leading-none uppercase">GUEST-01</span>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[9px] font-mono font-bold text-brand-dark/60 uppercase tracking-[0.2em]">Seq</span>
+                <span className="text-xl font-mono font-bold text-brand-dark leading-none">0042</span>
               </div>
             </div>
 
-            {/* QR/Data Stub */}
-            <div className="flex items-center gap-6">
-              <div className="h-16 w-32 border border-zinc-800 rounded flex flex-col items-center justify-center px-4">
-                 <div className="w-full h-1 bg-zinc-800 rounded-full mb-1" />
-                 <div className="w-full h-1 bg-zinc-800 rounded-full mb-1" />
-                 <div className="w-2/3 h-1 bg-zinc-800 rounded-full" />
-                 <span className="text-[8px] font-black text-zinc-700 mt-2 tracking-widest">PK-77421-LOG</span>
+            <div className="mt-6 pt-6 border-t-4 border-brand-dark w-full flex flex-col items-center z-10">
+              <div className="w-full h-16 bg-brand-cream border-2 border-brand-dark flex items-center justify-center overflow-hidden px-2">
+                <span className="text-brand-dark text-xs leading-none font-mono tracking-tighter scale-y-[3.5] select-none">
+                  {barcode}
+                </span>
               </div>
-              <div className="w-20 h-20 bg-primary-500 p-1.5 rounded-xl shadow-lg shadow-primary-500/10">
-                <div className="w-full h-full bg-black rounded-lg flex items-center justify-center p-2">
-                  <div className="grid grid-cols-4 gap-1">
-                    {Array.from({ length: 16 }).map((_, i) => (
-                      <div key={i} className="w-2 h-2 bg-primary-500" style={{ opacity: Math.random() > 0.3 ? 1 : 0.1 }} />
-                    ))}
-                  </div>
-                </div>
-              </div>
+              <span className="text-[10px] font-mono font-bold text-brand-dark mt-3 tracking-[0.3em]">
+                {flight.id.substring(0, 10).toUpperCase()}
+              </span>
             </div>
           </div>
         </motion.div>
 
-        {/* Footer actions */}
-        <div className="mt-12 flex flex-col md:flex-row gap-4">
-          <button className="flex-1 flex items-center justify-center gap-3 py-5 bg-zinc-900 border border-zinc-800 rounded-2xl text-white font-black uppercase tracking-widest text-xs hover:bg-zinc-800 transition-all">
-            <Calendar className="w-4 h-4 text-primary-500" />
-            Add to Wallet
+        {/* Map */}
+        {flight.originDetails && flight.destinationDetails && (
+          <div className="mt-8">
+            <FlightRouteMap
+              origin={flight.originDetails}
+              destination={flight.destinationDetails}
+              flightNumber={flight.number}
+            />
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="mt-8 flex flex-col md:flex-row gap-3">
+          <button className="flex-1 flex items-center justify-center gap-2 py-4 bg-brand-cream border-2 border-brand-dark text-brand-dark text-xs font-black uppercase tracking-[0.2em] hover:bg-brand-dark hover:text-brand-cream active:scale-[0.98] transition-all">
+            <Calendar className="w-4 h-4" />
+            Add to Itinerary
           </button>
-          <button className="flex-1 flex items-center justify-center gap-3 py-5 bg-primary-500 rounded-2xl text-black font-black uppercase tracking-widest text-xs shadow-xl shadow-primary-500/20 hover:bg-primary-600 transition-all transform hover:-translate-y-1">
-            <Info className="w-4 h-4" />
-            Live Flight Map
+          <button className="flex-1 flex items-center justify-center gap-2 py-4 bg-brand-green border-2 border-brand-dark text-brand-dark text-xs font-black uppercase tracking-[0.2em] hover:bg-brand-dark hover:text-brand-cream active:scale-[0.98] transition-all">
+            <Plane className="w-4 h-4" />
+            View Route
           </button>
         </div>
       </div>

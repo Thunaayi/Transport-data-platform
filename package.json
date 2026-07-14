@@ -11,5 +11,9 @@
     "dev:backend": "npm run dev --workspace=backend",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down"
+  },
+  "dependencies": {
+    "maplibre-gl": "^5.24.0",
+    "react-map-gl": "^8.1.1"
   }
 }

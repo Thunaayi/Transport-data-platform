@@ -1,82 +1,198 @@
-import puppeteer from 'puppeteer';
+import https from 'https';
+
+const paaFlightsBaseUrl = 'https://paaconnectapi.paa.gov.pk/api/flights';
+const paaHttpsAgent = new https.Agent({ rejectUnauthorized: false });
+
+type PaaDirection = 'Departure' | 'Arrival';
+
+type PaaFlight = {
+  FlightNumber?: string;
+  EnglishFromCity?: string;
+  EnglishToCity?: string;
+  ST?: string;
+  ET?: string;
+  EnglishRemarks?: string;
+};
+
+const cityFeeds = [
+  { city: 'karachi', iata: 'KHI', major: true },
+  { city: 'lahore', iata: 'LHE', major: true },
+  { city: 'islamabad', iata: 'ISB', major: true },
+  { city: 'multan', iata: 'MUX', major: false },
+  { city: 'peshawar', iata: 'PEW', major: false },
+  { city: 'quetta', iata: 'UET', major: false },
+];
+
+const cityToIata: Record<string, string> = {
+  karachi: 'KHI',
+  lahore: 'LHE',
+  islamabad: 'ISB',
+  multan: 'MUX',
+  peshawar: 'PEW',
+  quetta: 'UET',
+  'abu dhabi': 'AUH',
+  bahawalpur: 'BHV',
+  beijing: 'PEK',
+  dammam: 'DMM',
+  doha: 'DOH',
+  dubai: 'DXB',
+  faisalabad: 'LYP',
+  gilgit: 'GIL',
+  gwadar: 'GWD',
+  jeddah: 'JED',
+  kabul: 'KBL',
+  kuwait: 'KWI',
+  manchester: 'MAN',
+  medina: 'MED',
+  muscat: 'MCT',
+  riyadh: 'RUH',
+  sharjah: 'SHJ',
+  skardu: 'KDU',
+  sialkot: 'SKT',
+  sukkur: 'SKZ',
+  toronto: 'YYZ',
+};
+
+const formatDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+};
+
+const parsePakistanDateTime = (date: string, time?: string) => {
+  if (!time || !/^\d{1,2}:\d{2}$/.test(time)) {
+    return null;
+  }
+
+  const normalizedTime = time.padStart(5, '0');
+  const parsed = new Date(`${date}T${normalizedTime}:00+05:00`);
+
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const normalizeStatus = (value?: string) => {
+  const status = value?.trim().toLowerCase();
+
+  if (!status) return 'scheduled';
+  if (status.includes('cancel')) return 'cancelled';
+  if (status.includes('delay')) return 'delayed';
+  if (status.includes('depart')) return 'departed';
+  if (status.includes('arriv')) return 'arrived';
+  if (status.includes('expected')) return 'scheduled';
+
+  return status.replace(/\s+/g, '_');
+};
+
+const getIataForCity = (city?: string) => {
+  const trimmed = city?.trim();
+  if (!trimmed) return 'UNKNOWN';
+
+  const normalized = trimmed.toLowerCase();
+  return cityToIata[normalized] || trimmed.toUpperCase();
+};
+
+const buildPaaUrl = (date: string, direction: PaaDirection, city: string) =>
+  `${paaFlightsBaseUrl}/${date}/${direction}/${city}`;
+
+const fetchJson = (url: string) => new Promise<unknown>((resolve, reject) => {
+  const request = https.get(
+    url,
+    {
+      agent: paaHttpsAgent,
+      headers: {
+        accept: 'application/json, text/plain, */*',
+        referer: 'https://paa.gov.pk/',
+      },
+    },
+    (response) => {
+      let body = '';
+
+      response.setEncoding('utf8');
+      response.on('data', (chunk) => {
+        body += chunk;
+      });
+      response.on('end', () => {
+        if (!response.statusCode || response.statusCode < 200 || response.statusCode >= 300) {
+          reject(new Error(`PAA responded ${response.statusCode ?? 'unknown'} ${response.statusMessage ?? ''}`.trim()));
+          return;
+        }
+
+        try {
+          resolve(JSON.parse(body));
+        } catch (error) {
+          reject(error);
+        }
+      });
+    }
+  );
+
+  request.setTimeout(20000, () => {
+    request.destroy(new Error('PAA request timed out'));
+  });
+  request.on('error', reject);
+});
+
+const fetchPaaFeed = async (date: string, direction: PaaDirection, city: string) => {
+  const data = await fetchJson(buildPaaUrl(date, direction, city));
+  return Array.isArray(data) ? data as PaaFlight[] : [];
+};
+
+const mapPaaFlight = (flight: PaaFlight, date: string, direction: PaaDirection, airportIata: string) => {
+  const scheduledTime = parsePakistanDateTime(date, flight.ST);
+  if (!flight.FlightNumber || !scheduledTime) {
+    return null;
+  }
+
+  const estimatedTime = parsePakistanDateTime(date, flight.ET);
+  const isDeparture = direction === 'Departure';
+  const origin = isDeparture ? airportIata : getIataForCity(flight.EnglishFromCity);
+  const destination = isDeparture ? getIataForCity(flight.EnglishToCity) : airportIata;
+
+  return {
+    type: 'flight',
+    number: flight.FlightNumber.trim(),
+    origin,
+    destination,
+    scheduledDeparture: isDeparture ? scheduledTime : estimatedTime || scheduledTime,
+    scheduledArrival: isDeparture ? estimatedTime || scheduledTime : scheduledTime,
+    actualDeparture: isDeparture && estimatedTime ? estimatedTime : null,
+    actualArrival: !isDeparture && estimatedTime ? estimatedTime : null,
+    direction: isDeparture ? 'departure' : 'arrival',
+    status: normalizeStatus(flight.EnglishRemarks),
+    source: 'paa',
+  };
+};
 
 export const fetchFlightsFromScraper = async (isCritical: boolean = false) => {
+  const date = formatDate(new Date());
   const results: any[] = [];
-  // Target airports - since the PAA site is for Karachi, we'll scrape from there
-  // For other airports, we might need different sites or APIs
-  const targetAirports = isCritical ? ['KHI'] : ['KHI'];
+  const targetCities = cityFeeds.filter((feed) => isCritical ? feed.major : true);
 
-  try {
-    console.log(`[Scraper] Scraping ${isCritical ? 'critical' : 'all'} flights from PAA website...`);
+  console.log(`[Scraper] Fetching ${isCritical ? 'major-city' : 'all-city'} flights from PAA JSON feeds for ${date}...`);
 
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
-
-    for (const airport of targetAirports) {
-      const page = await browser.newPage();
-
+  for (const { city, iata } of targetCities) {
+    for (const direction of ['Departure', 'Arrival'] as PaaDirection[]) {
       try {
-        // Set user agent
-        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+        const rows = await fetchPaaFeed(date, direction, city);
+        const mappedFlights = rows
+          .map((flight) => mapPaaFlight(flight, date, direction, iata))
+          .filter(Boolean);
 
-        // Navigate to the schedule page
-        await page.goto('https://karachiairport.com.pk/schedule.aspx', {
-          waitUntil: 'networkidle2',
-          timeout: 30000
-        });
+        results.push(...mappedFlights);
 
-        // Wait for the page to load and potentially for data to appear
-        await page.waitForTimeout(5000); // Wait 5 seconds for JS to load data
-
-        // Try to extract flight data from the page
-        // Since it's a SPA, we need to look for the rendered content
-        const flights = await page.evaluate(() => {
-          const flightElements = document.querySelectorAll('[data-flight], .flight, .flight-item, tr, .card'); // Generic selectors
-          const extractedFlights: any[] = [];
-
-          flightElements.forEach((el, index) => {
-            if (index > 10) return; // Limit to first 10 for testing
-
-            const text = el.textContent || '';
-            // Look for flight number patterns like PK303
-            const flightMatch = text.match(/PK\d{3,4}/);
-            if (flightMatch) {
-              const number = flightMatch[0];
-              // Try to extract other info
-              const timeMatch = text.match(/\d{1,2}:\d{2}/);
-              const destinationMatch = text.match(/(?:to|arriving|departing)\s+([A-Z]{3})/i);
-
-              extractedFlights.push({
-                number,
-                origin: 'KHI', // Assume Karachi
-                destination: destinationMatch ? destinationMatch[1] : 'UNKNOWN',
-                scheduledDeparture: timeMatch ? new Date(`2026-05-11T${timeMatch[0]}:00`) : new Date(),
-                status: text.toLowerCase().includes('delay') ? 'delayed' : 'scheduled',
-                source: 'scraper'
-              });
-            }
-          });
-
-          return extractedFlights;
-        });
-
-        results.push(...flights);
-        console.log(`[Scraper] Extracted ${flights.length} flights from ${airport}`);
-
-      } catch (e) {
-        console.error(`[Scraper] Error scraping ${airport}:`, e);
-      } finally {
-        await page.close();
+        if (rows.length === 0) {
+          console.warn(`[Scraper] PAA ${city} ${direction} feed returned no rows.`);
+        } else {
+          console.log(`[Scraper] PAA ${city} ${direction}: mapped ${mappedFlights.length}/${rows.length} rows.`);
+        }
+      } catch (error) {
+        console.error(`[Scraper] Failed to fetch PAA ${city} ${direction} feed:`, error);
       }
     }
-
-    await browser.close();
-    console.log(`[Scraper] Successfully scraped ${results.length} flights from PAA website.`);
-    return results;
-  } catch (error) {
-    console.error('[Scraper] Critical failure during scraping:', error);
-    return [];
   }
+
+  console.log(`[Scraper] Completed PAA JSON fetch with ${results.length} mapped flights.`);
+  return results;
 };

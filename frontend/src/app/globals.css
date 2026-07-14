@@ -1,21 +1,79 @@
 @import "tailwindcss";
 
 @theme {
-  /* Brand: Amber */
-  --color-primary-500: #f59e0b;
-  --color-primary-600: #d97706;
+  /* Brand: Pakistan transport palette */
+  --color-brand-cream: #f3f2eb;
+  --color-brand-green: #8ab661;
+  --color-brand-dark: #183c28;
+  
+  --color-primary-500: var(--color-brand-green);
+  --color-primary-600: #749d4f;
 
   /* Typography */
   --font-sans: var(--font-inter);
-  --font-display: var(--font-barlow);
+  --font-display: var(--font-archivo);
+  --font-mono: var(--font-mono-display);
 
-  /* Border radius system: 3 levels only */
-  --radius-sm: 4px;    /* badges, tags */
-  --radius-md: 8px;    /* buttons, inputs */
-  --radius-lg: 12px;   /* cards */
+  /* Border radius system: sharp/blocky look */
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
-  background-color: #09090b; /* zinc-950 */
-  color: #f4f4f5;             /* zinc-100 */
+  background-color: var(--color-brand-cream);
+  color: var(--color-brand-dark);
+  overscroll-behavior-y: none;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  touch-action: manipulation;
 }
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background-color: var(--color-brand-green);
+  color: var(--color-brand-dark);
+}
+
+/* MapLibre brand overrides */
+.maplibregl-map {
+  font-family: var(--font-sans), sans-serif;
+}
+
+.maplibregl-popup-content {
+  border-radius: 0 !important;
+  border: 2px solid var(--color-brand-dark);
+  box-shadow: 4px 4px 0 0 var(--color-brand-dark) !important;
+  padding: 8px 12px !important;
+  font-family: var(--font-sans), sans-serif;
+}
+
+.maplibregl-popup-tip {
+  display: none;
+}
+
+.maplibregl-popup-close-button {
+  display: none;
+}
+
+/* Custom utility for the cutout corners used in tickets */
+@layer utilities {
+  .ticket-stub {
+    mask-image: radial-gradient(circle at 0% 50%, transparent 12px, black 12px);
+    border-left: 2px dashed var(--color-brand-dark);
+  }
+}

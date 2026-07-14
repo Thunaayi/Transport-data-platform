@@ -9,6 +9,11 @@ export const fetchFlightsFromAPI = async (isCritical: boolean = false) => {
   const targetAirports = isCritical ? ['KHI', 'ISB', 'LHE'] : ['KHI', 'ISB', 'LHE', 'PEW', 'MUX', 'UET'];
   const results: any[] = [];
 
+  const parseDate = (value: any) => {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
+
   try {
     console.log(`[API] Fetching ${isCritical ? 'critical' : 'all'} flights from Aviationstack...`);
     
@@ -29,18 +34,36 @@ export const fetchFlightsFromAPI = async (isCritical: boolean = false) => {
 
       // Map to our DB schema
       const mappedFlights = data.data.map((flight: any) => {
+        const scheduledDeparture = parseDate(flight.departure?.scheduled);
+        const scheduledArrival = parseDate(flight.arrival?.scheduled) || parseDate(flight.departure?.scheduled);
+
         return {
           type: 'flight',
-          number: flight.flight.iata || flight.flight.icao || 'UNKNOWN',
-          origin: flight.departure.iata,
-          destination: flight.arrival.iata || 'UNKNOWN',
-          scheduledDeparture: new Date(flight.departure.scheduled),
-          scheduledArrival: flight.arrival.scheduled ? new Date(flight.arrival.scheduled) : new Date(flight.departure.scheduled), // Fallback
-          actualDeparture: flight.departure.actual ? new Date(flight.departure.actual) : null,
-          actualArrival: flight.arrival.actual ? new Date(flight.arrival.actual) : null,
+          number: flight.flight?.iata || flight.flight?.icao || 'UNKNOWN',
+          origin: flight.departure?.iata || 'UNKNOWN',
+          destination: flight.arrival?.iata || 'UNKNOWN',
+          scheduledDeparture,
+          scheduledArrival,
+          actualDeparture: parseDate(flight.departure?.actual),
+          actualArrival: parseDate(flight.arrival?.actual),
+          direction: 'departure',
           status: flight.flight_status || 'scheduled',
           source: 'api',
         };
+      }).filter((flight: any) => {
+        const valid =
+          typeof flight.type === 'string' &&
+          typeof flight.number === 'string' &&
+          typeof flight.origin === 'string' &&
+          typeof flight.destination === 'string' &&
+          flight.scheduledDeparture instanceof Date &&
+          flight.scheduledArrival instanceof Date;
+
+        if (!valid) {
+          console.warn('[API] Skipping invalid flight record:', flight);
+        }
+
+        return valid;
       });
 
       results.push(...mappedFlights);

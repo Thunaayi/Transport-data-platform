@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { User, LogOut, LogIn, Loader2 } from 'lucide-react';
+import { User as UserIcon, LogOut, LogIn, Loader2 } from 'lucide-react';
+import type { User } from '@supabase/supabase-js';
 
 export default function AuthButton() {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [signingIn, setSigningIn] = useState(false);
 
@@ -45,13 +46,13 @@ export default function AuthButton() {
   if (user) {
     return (
       <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg">
-          <User className="w-4 h-4 text-primary-500" />
-          <span className="text-xs font-bold text-zinc-300">{user.email?.split('@')[0]}</span>
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-brand-cream border-2 border-brand-dark">
+          <UserIcon className="w-4 h-4 text-brand-dark" />
+          <span className="text-xs font-bold text-brand-dark uppercase tracking-widest">{user.email?.split('@')[0]}</span>
         </div>
         <button
           onClick={handleLogout}
-          className="p-2 text-zinc-500 hover:text-white transition-colors"
+          className="p-2 text-brand-dark hover:text-brand-green transition-colors"
           title="Sign Out"
         >
           <LogOut className="w-5 h-5" />
@@ -60,7 +61,7 @@ export default function AuthButton() {
     );
   }
 
-  const btnClass = "flex items-center justify-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 disabled:opacity-60 disabled:cursor-not-allowed text-black text-xs font-black uppercase tracking-widest rounded-lg transition-all";
+  const btnClass = "flex items-center justify-center gap-2 px-4 py-2 bg-brand-green hover:bg-primary-600 disabled:opacity-60 disabled:cursor-not-allowed text-brand-dark border-2 border-brand-dark text-xs font-black uppercase tracking-widest transition-all hover:-translate-y-0.5 active:scale-95 active:translate-y-0 shadow-[2px_2px_0px_0px_rgba(24,60,40,1)]";
 
   return (
     <button onClick={handleLogin} disabled={signingIn} className={btnClass}>
